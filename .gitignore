@@ -1,0 +1,15 @@
+/bin/
+/dist/
+*.out
+.DS_Store
+
+# Local secret files — never commit
+.env
+.env.*
+
+# Local project config (points at a private endpoint) — users run `tertib init`
+.tertib.yml
+
+# Local tooling and spec drafts — not published
+/.claude/
+/docs/
