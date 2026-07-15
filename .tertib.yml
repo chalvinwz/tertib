@@ -1,0 +1,180 @@
+# tertib — production convention config
+# https://github.com/chalvinwz/tertib
+#
+# Conventions are written in plain language; tertib sends changed code (or all
+# tracked files with --all) to the model and reports violations, failing CI at
+# or above `checks.fail_on`. Tune rule `severity` to control what blocks a merge.
+version: 1
+
+# Optional local-dev convenience: load KEY=VALUE from a file before resolving
+# secrets. Missing files are ignored; real environment variables always win.
+# Keep this file out of git.
+env_file: .env
+
+# ---------------------------------------------------------------------------
+# Model — any OpenAI-compatible endpoint. tertib appends /chat/completions.
+# ---------------------------------------------------------------------------
+model:
+  base_url: https://llm.devopsinstitute.id/v1
+  name: claude-haiku          # default; use claude-sonnet for higher-accuracy reviews
+  api_key:
+    env: TERTIB_API_KEY        # inject from CI secrets; never inline a key
+    # Production alternative — fetch from AWS Secrets Manager (auth via the
+    # standard AWS credential chain: env keys, IAM role, or OIDC):
+    # aws_secretsmanager:
+    #   secret_id: prod/tertib/api-key
+    #   json_key: api_key
+    #   region: ap-southeast-1
+  temperature: 0              # deterministic as the model allows
+  timeout: 90s                # per-request timeout
+  max_retries: 4              # retries transient 429/5xx with backoff
+  max_tokens: 4096            # cap output per call — bounds cost
+
+# ---------------------------------------------------------------------------
+# Cross-cutting checks
+# ---------------------------------------------------------------------------
+checks:
+  fail_on: error              # error | warning | never — lowest severity that fails CI
+  max_file_kb: 256            # skip larger files (reported as skipped)
+  ignore:                     # globs excluded from review (** = recursive)
+    - "vendor/**"
+    - "third_party/**"
+    - "**/*.gen.go"
+    - "**/*.pb.go"
+    - "**/mock_*.go"
+    - "**/generated/**"
+    - "**/testdata/**"
+    - "bin/**"
+    - "dist/**"
+    - "build/**"
+    - "**/*.min.js"
+
+# ---------------------------------------------------------------------------
+# Rules — each is one convention. `paths` scopes a rule to matching files
+# (omit to apply everywhere). Severity: error blocks merge; warning is advisory.
+# ---------------------------------------------------------------------------
+rules:
+  # --- Security (blocking) --------------------------------------------------
+  - id: no-hardcoded-secrets
+    severity: error
+    description: |
+      Source code must not contain hardcoded secrets: API keys, access tokens,
+      passwords, private keys, or database connection strings with embedded
+      credentials. Secrets must come from environment variables, a config file,
+      or a secret manager. String literals that look like credentials (e.g.
+      "sk-...", "AKIA...", "password = ...") are violations. Obvious test
+      fixtures and clearly fake placeholders are not.
+
+  - id: no-secret-logging
+    severity: error
+    description: |
+      Resolved secret values (API keys, tokens, webhook URLs, passwords) must
+      never be written to logs, stdout, stderr, or error messages in plain
+      text. They must be masked or redacted before printing.
+
+  - id: sql-parameterized
+    severity: error
+    paths: ["internal/**", "cmd/**", "pkg/**"]
+    description: |
+      Database queries must use parameterized statements / bound placeholders.
+      Building SQL by concatenating or fmt-formatting user-controlled input into
+      the query string is a violation (SQL injection risk).
+
+  - id: no-insecure-tls
+    severity: error
+    description: |
+      TLS verification must not be disabled. Setting InsecureSkipVerify: true,
+      or otherwise accepting any certificate, is a violation outside of clearly
+      marked test code.
+
+  # --- Correctness & error handling ----------------------------------------
+  - id: wrap-errors-with-context
+    severity: error
+    paths: ["internal/**", "cmd/**", "pkg/**"]
+    description: |
+      Errors returned up the call stack must be wrapped with context using
+      fmt.Errorf("doing X: %w", err), not returned bare, so failures are
+      traceable to their origin. Returning a predefined sentinel error directly
+      is acceptable.
+
+  - id: no-swallowed-errors
+    severity: error
+    paths: ["internal/**", "cmd/**", "pkg/**"]
+    description: |
+      Errors must not be silently discarded. Assigning an error to the blank
+      identifier (_ = f()) or ignoring a returned error without handling it is a
+      violation, except for calls whose error is genuinely irrelevant (e.g.
+      deferred Close on a read-only handle) where the intent is clear.
+
+  - id: no-panic-in-library
+    severity: error
+    paths: ["internal/**", "pkg/**"]
+    description: |
+      Library and package code must not call panic() for ordinary error
+      conditions; return an error instead. panic is acceptable only for truly
+      unrecoverable programmer errors (e.g. an impossible switch default).
+
+  - id: context-first-argument
+    severity: warning
+    paths: ["internal/**", "cmd/**", "pkg/**"]
+    description: |
+      Functions that perform I/O, network calls, or other cancellable work take
+      context.Context as their first parameter, named ctx, and propagate it to
+      downstream calls rather than using context.Background() mid-stack.
+
+  - id: external-calls-have-timeout
+    severity: warning
+    paths: ["internal/**", "cmd/**", "pkg/**"]
+    description: |
+      Outbound network calls must be bounded by a timeout or a cancellable
+      context. Using http.DefaultClient or an http.Client with no Timeout for
+      external requests is a violation.
+
+  # --- Naming & structure ---------------------------------------------------
+  - id: exported-symbol-docs
+    severity: warning
+    paths: ["internal/**", "cmd/**", "pkg/**"]
+    description: |
+      Every exported (capitalized) type, function, method, constant, and
+      variable has a doc comment, and the comment begins with the symbol's name
+      (Go convention: "// FooBar does ...").
+
+  - id: package-doc-comment
+    severity: warning
+    paths: ["internal/**", "cmd/**", "pkg/**"]
+    description: |
+      Every package has a doc comment. One file in the package begins with a
+      "// Package <name> ..." comment that describes what the package does.
+
+  - id: no-magic-numbers
+    severity: warning
+    paths: ["internal/**", "cmd/**", "pkg/**"]
+    description: |
+      Unexplained numeric or string literals used as configuration, limits,
+      timeouts, or thresholds should be named constants with a meaningful name,
+      not inline magic values. Trivial values (0, 1, -1, empty string) are fine.
+
+  # --- Tests ----------------------------------------------------------------
+  - id: table-driven-tests
+    severity: warning
+    paths: ["**/*_test.go"]
+    description: |
+      Tests that exercise multiple input cases use table-driven subtests with
+      t.Run and a descriptive case name, rather than copy-pasted test bodies.
+
+  - id: no-committed-skips
+    severity: error
+    paths: ["**/*_test.go"]
+    description: |
+      Tests must not contain t.Skip / t.Skipf without an accompanying reason
+      referencing why (e.g. an issue link or a clear environment condition).
+      Leftover debugging skips that disable coverage are a violation.
+
+# ---------------------------------------------------------------------------
+# Optional notifier — posts a pass/fail summary to Discord after each run.
+# Failing to notify never changes the exit code.
+# ---------------------------------------------------------------------------
+# output:
+#   notify:
+#     discord_webhook:
+#       env: TERTIB_DISCORD_WEBHOOK

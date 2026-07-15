@@ -1,0 +1,58 @@
+# tertib configuration — https://github.com/chalvinwz/tertib
+# Define your team's conventions as plain-language rules. tertib sends changed
+# code to an AI model and reports any rule violations, failing CI on error.
+version: 1
+
+# Optional: load KEY=VALUE pairs from a file before resolving secrets, handy for
+# local development. Missing files are ignored; already-set environment
+# variables are never overwritten. The --env-file flag overrides this.
+# env_file: .env
+
+model:
+  # Any OpenAI-compatible endpoint: a hosted gateway, a self-hosted proxy, or a
+  # local model. tertib is not tied to any single provider.
+  base_url: https://your-gateway.example.com/v1
+  name: your-model-name
+
+  # The API key comes from a secret source, never inline. Pick ONE source.
+  api_key:
+    env: TERTIB_API_KEY
+    # aws_secretsmanager:            # fetch from AWS Secrets Manager instead
+    #   secret_id: tertib/api-key     #   secret name or ARN
+    #   json_key: api_key            #   optional: pick a field from a JSON secret
+    #   region: ap-southeast-1       #   optional: defaults to the SDK region
+
+  temperature: 0        # 0 keeps judgements as deterministic as the model allows
+  timeout: 60s          # per-request timeout
+  max_retries: 3
+  max_tokens: 2048      # cap output tokens per call — bounds cost per request
+
+checks:
+  fail_on: error        # error | warning | never — lowest severity that fails CI
+  ignore:               # glob patterns excluded from review
+    - "vendor/**"
+    - "**/*.gen.go"
+    - "dist/**"
+  max_file_kb: 200      # skip files larger than this (noted in the report)
+
+rules:
+  - id: handler-naming
+    severity: error
+    paths: ["internal/handlers/**"]   # scope to matching files; omit for all files
+    description: |
+      Handler files use snake_case. Handler functions are named
+      <Verb><Resource>Handler, e.g. CreateUserHandler.
+
+  - id: no-business-logic-in-handlers
+    severity: warning
+    paths: ["internal/handlers/**"]
+    description: |
+      Handlers only parse input, call a service, and write the response.
+      Business logic belongs in the service layer, not in handlers.
+
+# Optional: post a pass/fail summary to a Discord channel. Uses the same secret
+# source block as api_key. Failing to notify never changes the exit code.
+# output:
+#   notify:
+#     discord_webhook:
+#       env: TERTIB_DISCORD_WEBHOOK

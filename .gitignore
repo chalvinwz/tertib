@@ -1,0 +1,11 @@
+/bin/
+/dist/
+*.out
+.DS_Store
+
+# Local secret files — never commit
+.env
+.env.*
+
+# Local tooling and spec drafts — not published
+/.claude/

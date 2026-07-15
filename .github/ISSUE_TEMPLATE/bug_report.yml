@@ -1,0 +1,76 @@
+name: Bug report
+description: Something in tertib behaves incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill in the fields
+        below — complete reports get fixed faster. For questions or usage help,
+        use Discussions instead. For security issues, see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: tertib version
+      description: Output of `tertib version`.
+      placeholder: "e.g. v0.1.0 (or commit hash from a source build)"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS / architecture
+      placeholder: "e.g. Ubuntu 24.04 amd64 (CI runner), macOS 15.5 arm64"
+    validations:
+      required: true
+  - type: input
+    id: ci
+    attributes:
+      label: CI system
+      placeholder: "e.g. GitHub Actions, GitLab CI, Bitbucket Pipelines, local"
+    validations:
+      required: false
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install tertib?
+      options:
+        - go install
+        - Built from source (make build)
+        - Downloaded release binary
+        - Docker image
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you observed, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps, including the command/flags you ran.
+      placeholder: |
+        1. Run `tertib check --base main`
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant .tertib.yml
+      description: The rule(s) involved. Redact secret sources if needed — never paste secret values.
+      render: yaml
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output or report
+      render: text
+    validations:
+      required: false
