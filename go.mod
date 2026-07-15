@@ -5,7 +5,7 @@ go 1.26
 require (
 	github.com/aws/aws-sdk-go-v2 v1.42.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.27
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.5
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.43.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
