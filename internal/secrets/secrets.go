@@ -44,7 +44,9 @@ type AWSSecretsManagerRef struct {
 	// SecretID is the secret name or full ARN.
 	SecretID string `yaml:"secret_id"`
 	// JSONKey, when set, selects one field from a secret whose value is a JSON
-	// object (the common "store several keys in one secret" pattern).
+	// object (the common "store several keys in one secret" pattern). It may be
+	// a dot-path to reach a nested field, e.g. "tertib.api_key"; a name with no
+	// dots reads a top-level field. The selected value must be a string.
 	JSONKey string `yaml:"json_key,omitempty"`
 	// Region overrides the SDK default region for this lookup.
 	Region string `yaml:"region,omitempty"`
@@ -168,11 +170,21 @@ func (rv *Resolver) resolveAWS(ctx context.Context, ref AWSSecretsManagerRef) (s
 	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
 		return "", fmt.Errorf("secret %q is not a JSON object but json_key %q was requested: %w", ref.SecretID, ref.JSONKey, err)
 	}
-	v, ok := obj[ref.JSONKey]
-	if !ok {
-		return "", fmt.Errorf("json_key %q not found in secret %q", ref.JSONKey, ref.SecretID)
+	// json_key may be a dot-path into nested objects, e.g. "tertib.api_key".
+	// A single segment (no dots) reads a top-level field.
+	segments := strings.Split(ref.JSONKey, ".")
+	var cur any = obj
+	for i, seg := range segments {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("json_key %q in secret %q: %q is not a JSON object", ref.JSONKey, ref.SecretID, strings.Join(segments[:i], "."))
+		}
+		cur, ok = m[seg]
+		if !ok {
+			return "", fmt.Errorf("json_key %q not found in secret %q", ref.JSONKey, ref.SecretID)
+		}
 	}
-	s, ok := v.(string)
+	s, ok := cur.(string)
 	if !ok {
 		return "", fmt.Errorf("json_key %q in secret %q is not a string", ref.JSONKey, ref.SecretID)
 	}

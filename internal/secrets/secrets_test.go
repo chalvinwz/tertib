@@ -142,3 +142,26 @@ func TestRedactMultipleAndEmpty(t *testing.T) {
 		t.Errorf("non-secret text should survive: %q", out)
 	}
 }
+
+func TestResolveAWSJSONKeyNested(t *testing.T) {
+	rv, _ := newTestResolver(fakeSM{value: `{"tertib":{"api_key":"nested-secret"},"other":"x"}`})
+	got, err := rv.Resolve(context.Background(), Ref{
+		AWSSecretsManager: &AWSSecretsManagerRef{SecretID: "planpalasix/control/secrets", JSONKey: "tertib.api_key"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "nested-secret" {
+		t.Errorf("got %q, want nested-secret", got)
+	}
+}
+
+func TestResolveAWSJSONKeyNestedNotObject(t *testing.T) {
+	rv, _ := newTestResolver(fakeSM{value: `{"tertib":"flat"}`})
+	_, err := rv.Resolve(context.Background(), Ref{
+		AWSSecretsManager: &AWSSecretsManagerRef{SecretID: "s", JSONKey: "tertib.api_key"},
+	})
+	if err == nil {
+		t.Fatal("expected error descending into non-object, got nil")
+	}
+}
